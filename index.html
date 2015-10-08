@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<script src="bootstrap/jquery.js"></script>
+<script type="text/javascript" charset="utf-8" language="javascript" src="bootstrap/jquery.dataTables.js"></script>
+<script type="text/javascript" charset="utf-8" language="javascript" src="bootstrap/DT_bootstrap.js"></script>
+<script type="text/javascript">
+    var if_parar_procura = "false";
+
+    //Magic
+    function doAjax(url, links, iteration) {
+
+        //user pushed stop search
+        if (if_parar_procura == "true") {
+            if_parar_procura = "false";
+            return
+        }
+
+        //change progress bar
+        changeProgressBarValue((iteration / links.length) * 100);
+
+        //Loading Icon off
+        if ((iteration / links.length) * 100 == 100) {
+            document.getElementById('isLoading').style.display = 'none';
+        }
+
+        //enable search button
+        if (iteration == links.length) {
+            //document.getElementById("search_button").disabled = false;
+            $('#search_button').html("Procurar");
+            document.getElementById("moeda").disabled = false;
+            return
+        }
+
+        link = links[iteration];
+
+        //Get currency of choice
+        var currency = $('#moeda').html();
+
+        if (currency.indexOf("Euro") != -1)
+            currency = "Euro";
+        if (currency.indexOf("Real") != -1)
+            currency = "Real";
+
+
+
+        if (link.match('^http')) {
+            $.getJSON("http://query.yahooapis.com/v1/public/yql?" +
+                "q=select%20*%20from%20html%20where%20url%3D%22" +
+                encodeURIComponent(link) +
+                "%22&format=xml'&callback=?",
+                function(data) {
+                    //All is well with YQL
+                    if (data.results[0]) {
+
+                        $.post(url, {
+                                html: data.results[0],
+                                url: link,
+                                moeda: currency
+                            },
+                            function(data) {
+
+                                var cards = data.split("###");
+
+                                for (i = 0; i < cards.length - 1; i++) {
+
+                                    var infos = cards[i].split(";;;");
+
+                                    //do not put in table if search stopped
+                                    if (if_parar_procura == "false")
+                                        $('#info_table').dataTable().fnAddData([
+                                            infos[0],
+                                            infos[1],
+                                            infos[2],
+                                            infos[3],
+                                            infos[4],
+                                            infos[5]
+                                        ]);
+                                }
+
+                                next_iteration = iteration + 1
+
+                                doAjax("/getHTML", links, next_iteration);
+
+
+                            });
+                        //IF YAHOO FAILS
+                    } else {
+                        $.post("/getHTML_Exceptions", {
+                                url: link,
+                                moeda: currency
+                            },
+                            function(data) {
+
+                                var cards = data.split("###");
+
+                                for (i = 0; i < cards.length - 1; i++) {
+
+                                    var infos = cards[i].split(";;;");
+
+                                    //do not put in table if search stopped
+                                    if (if_parar_procura == "false")
+                                        $('#info_table').dataTable().fnAddData([
+                                            infos[0],
+                                            infos[1],
+                                            infos[2],
+                                            infos[3],
+                                            infos[4],
+                                            infos[5]
+                                        ]);
+                                }
+
+                                next_iteration = iteration + 1
+
+                                doAjax("/getHTML", links, next_iteration);
+
+
+                            });
+                    }
+                }
+            );
+        } else {
+            console.log(link);
+        }
+    }
+
+    function runScript(e) {
+        if (e.keyCode == 13) {
+
+            var type_button = $('#search_button').html();
+            if (type_button == "Parar Procura")
+                return;
+
+            if (!document.getElementById("search_button").disabled)
+                sendCard();
+        }
+    }
+
+
+    function sendToServer(url, data) {
+
+        $.post(url, {
+                card: data
+            },
+            function(data) {
+
+                if (data == "Caracter Invalido na pesquisa") {
+                    alert("Caracter Invalido na pesquisa \n Caracteres permitdos abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,-' ()");
+                    //Loading Icon off
+                    document.getElementById('isLoading').style.display = 'none';
+                    //enable search button
+                    document.getElementById("search_button").disabled = false;
+                    //enable currency choice
+                    document.getElementById("moeda").disabled = false;
+                } else {
+                    var links = data.split("###")
+                    doAjax("/getHTML", links, 0);
+                }
+            });
+
+    }
+
+    function sendCard() {
+
+        //test to see if user wants to stop search
+        var type_button = $('#search_button').html();
+
+        if (type_button == "Parar Procura") {
+            if_parar_procura = "true";
+            restart_indicators_zero();
+            return;
+        }
+
+        var oTable = $('#info_table').dataTable();
+
+        // Immediately 'nuke' the current rows
+        oTable.fnClearTable();
+
+        card = document.getElementById("card_value").value;
+
+        if (card == "Card Name") {
+            alert("Please type a card to search")
+        } else if (card == "") {
+            alert("Please type a card to search")
+        } else {
+            //Progress bar = 0
+            changeProgressBarValue(0);
+            //Loading Icon on
+            document.getElementById('isLoading').style.display = '';
+            //disable search button
+            //document.getElementById("search_button").disabled = true;
+            $('#search_button').html("Parar Procura");
+
+            //disable Currency choice
+            document.getElementById("moeda").disabled = true;
+            //magic
+            sendToServer("/returnPages", card);
+        }
+    }
+
+    //change progress bar status 
+    function changeProgressBarValue(value) {
+
+        $('#search_bar').attr('style', "width: " + Math.round(value) + "%;");
+    }
+
+    //changes big card
+    function ChangeBigCard(obj) {
+
+        var card = obj.getAttribute("keyName");
+
+        card.replace(" ", "%20");
+        $('#big_card').attr('src', "http://gatherer.wizards.com/Handlers/Image.ashx?type=card&name=" + card + "&size=small&options=");
+
+    }
+
+    function restart_indicators_zero() {
+
+        document.getElementById('isLoading').style.display = 'none';
+        $('#search_button').html("Procurar");
+
+    }
+
+    /* Table initialisation */
+    function startTable() {
+        $('#info_table').dataTable({
+            "sDom": "<'row'<'span6'l><'span6'f>r>t<'row'<'span6'i><'span6'p>>",
+            "sPaginationType": "bootstrap",
+            "oLanguage": {
+                "sLengthMenu": "_MENU_ records per page"
+            }
+        });
+    }
+
+    function change_currency(obj) {
+
+
+        //console.log(table);
+
+        var moeda = obj.getAttribute("keyName");
+        //$('#price').html("Pre&ccedil;o ("+ moeda+")");
+
+        $('#moeda').html(moeda + " <span class=\"caret\"></span>");
+    }
+</script>
+
+<script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-29483966-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+        var ga = document.createElement('script');
+        ga.type = 'text/javascript';
+        ga.async = true;
+        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+        var s = document.getElementsByTagName('script')[0];
+        s.parentNode.insertBefore(ga, s);
+    })();
+</script>
+
+  <head>
+	<meta name="google-site-verification" content="kAv2Ym3XNv41d7Td4BTPY_EDdZzV3TzSKiLs7KHm_P8" />
+    <meta charset="utf-8">
+    <title>MTG price consulting</title>
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le styles -->
+    <link href="bootstrap/bootstrap.css" rel="stylesheet">
+	<link rel="stylesheet" type="text/css" href="bootstrap/DT_bootstrap.css">
+    <style>
+      body {
+        padding-top: 60px; /* 60px to make the container go all the way to the bottom of the topbar */
+      }
+    </style>
+    <link href="bootstrap/bootstrap-responsive.css" rel="stylesheet">
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </a>
+          <a class="brand" href="#">MTG Price Consulting</a>
+          <div class="nav-collapse">
+            <ul class="nav">
+              <li class="active"><a href="/">Procura</a></li>
+			  
+			  <li class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown">Lojas <b class="caret"></b></a>
+              <ul class="dropdown-menu">
+                <li><a href="http://www.cardsmagic.net" target=\"_blank\">Cardsmagic</a></li>
+				<li class="divider"></li>
+                <li><a href="http://www.magictuga.com" target=\"_blank\">Magictuga</a></li>
+				<li class="divider"></li>
+                <li><a href="http://www.viamagic.net" target=\"_blank\">Viamagic</a></li>
+				<li class="divider"></li>
+				<li><a href="http://letscollect.com.br" target=\"_blank\">Letscollect</a></li>
+              </ul>
+            </li>
+			
+			  <li><a href="/info.html">Informa&ccedil;&atilde;o</a></li>
+              <li><a href="/contactos.html">Contactos</a></li>
+			
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+	
+	
+ <div class="container-fluid">
+      <div class="row-fluid">
+	<div class="span12">
+		<img class="logo" src="img/logo_en.png"/>
+	</div>	
+	<div class="span7">
+		<p>
+       <input class="input-medium search-query" id="card_value" type="text" placeholder="Nome Carta" onkeypress="return runScript(event)">
+			<button id="search_button" onclick="sendCard()" class="btn btn-primary">Procurar</button> 
+			<img id="isLoading" src="img/loading.gif" style="display:none" alt="Smiley face"/>
+			(p.ex. Tarmogoyf)
+			
+			<p></p>
+			<b>Moeda escolhida:</b>
+			<p></p>
+			
+			<div class="btn-group">
+				<a class="btn btn-danger dropdown-toggle" data-toggle="dropdown" id="moeda" href="#">Euro <span class="caret"></span></a>
+			<ul class="dropdown-menu">
+				<li keyName="Euro" onclick="change_currency(this)"><a>Euro</a></li>
+				<li keyName="Real" onclick="change_currency(this)"><a>Real</a></li>
+			</ul>
+				
+			</div>
+			
+					  
+			<p>
+			<div  class="progress progress-success
+				progress-striped ">
+				<div id="search_bar" class="bar"
+					style="width: 0%;"></div>
+			</div>
+			<table id="info_table" style="display" class="table table-striped table-bordered">
+			<thead>
+				<tr>
+					<th>Loja</th>
+					<th>Nome</th>
+					<th>Edi&ccedil;&atilde;o</th>
+					<th>Tipo</th>
+					<th>Stock</th>
+					<th id="price">Pre&ccedil;o</th>
+				</tr>
+			</thead>
+			<tbody id="info_holder">
+			
+			</tbody>
+			</table>
+			
+			
+		<p><br /></p>
+		<p><br /></p>		
+		<!--span><b>* O link "add to cart" adiciona em uma unidade o artigo na loja indicada.</b></span-->
+		<p></p>
+		<!--span> Aten&ccedil;&atilde;o a imagem apresentada pode n&atilde;o reflectir a edi&ccedil;&atilde;o correcta.</span-->
+    </div>
+	
+	<div class="span3">
+		<img id="big_card" class="big_card" src="http://Gatherer.wizards.com/Handlers/Image.ashx?size=small&amp;multiverseid=10100000&amp;type=card">	
+		<!--h3>SECOND</h3-->
+	</div>
+		</div>
+</div>
+    <!-- Le javascript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+	<script src="bootstrap/bootstrap-collapse.js"></script>
+	<script src="bootstrap/bootstrap-dropdown.js"></script>
+  </body>
+</html>

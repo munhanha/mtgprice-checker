@@ -1,0 +1,4 @@
+cron:
+- description: get daily currency
+  url: /conversions
+  schedule: every 6 hours

@@ -1,0 +1,23 @@
+application: mtgprice-checker
+version: 1
+runtime: python
+api_version: 1
+
+handlers:
+
+- url: /img
+  static_dir: img
+  
+- url: /bootstrap
+  static_dir: bootstrap 
+
+- url: /contactos.html
+  static_files: contactos.html
+  upload: contactos.html
+ 
+- url: /info.html
+  static_files: info.html
+  upload: info.html 
+ 
+- url: .*
+  script: main.py
